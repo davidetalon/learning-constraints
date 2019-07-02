@@ -1,0 +1,11 @@
+# ignore fucking DS_Store
+*.DS_Store
+
+# ignore .vscode folder
+**/.vscode/
+
+# ignore cache files
+**/__pycache__
+
+# ignore compiled files
+*.pyc
