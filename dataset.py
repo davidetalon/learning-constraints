@@ -1,6 +1,6 @@
 from CSP import CSP
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 class CSPDataset(Dataset):
     """
@@ -49,6 +49,15 @@ class CSPDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
 
+        sample_unsqueezed = torch.unsqueeze(sample, 0)
+
+        # check consistency
+        consistency = CSP.matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
+
+        # label each sample with its consistency
+        sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
+        sample.squeeze()
+
         return sample
 
 # TODO: boosting data with partial assignments?!
@@ -59,7 +68,10 @@ class ToTensor(object):
 
     """
     def __call__(self, sample):
-        return torch.from_numpy(sample)
+        return torch.from_numpy(sample).float()
+
+
+from torch.utils.data import DataLoader
 
 if __name__ == "__main__":
 
