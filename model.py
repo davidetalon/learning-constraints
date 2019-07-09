@@ -14,10 +14,10 @@ class Generator(nn.Module):
 
         super().__init__()
 
-        def block(input_size, out_size):
-            layers =[nn.Linear(input_size, out_size)]
-            layers.append(nn.ReLU())
-            return layers
+        # def block(input_size, out_size):
+        #     layers =[nn.Linear(input_size, out_size)]
+        #     layers.append(nn.ReLU())
+        #     return layers
 
         self.sat_matrix_size = csp_shape['n']*csp_shape['d']
 
