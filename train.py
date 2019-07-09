@@ -4,6 +4,7 @@ from dataset import ToTensor, CSPDataset
 from torch.utils.data import DataLoader, Dataset
 from model import Generator, Discriminator, train_batch
 import json
+from pathlib import Path
 # create the parser
 parser = argparse.ArgumentParser(description='Train the CSP GAN')
 
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         print('## EPOCH %d' % (epoch + 1))
         print('##################################')
         # Iterate batches
-        for batch_sample in dataloader:
+        for i, batch_sample in enumerate(dataloader):
 
             # moving to device
             batch = batch_sample.to(device)
@@ -81,7 +82,7 @@ if __name__ == '__main__':
             # Update network
             batch_loss_gen, batch_loss_discr = train_batch(generator, discriminator, batch, \
                 csp_shape, adversarial_loss, optimizer)
-            print('\t Training loss (single batch):', batch_loss_gen, batch_loss_discr)
+            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"% (epoch + 1, args.num_epochs, i+1, len(dataloader), batch_loss_discr.item(), batch_loss_gen.item()))
 
     #Save all needed parameters
     print("###############")
@@ -99,6 +100,6 @@ if __name__ == '__main__':
 
     # Save generated CSP
     with open(out_dir / 'csp.json', 'w') as f:
-        json.dump(dataset, f, indent=4)
+        json.dump(dataset.csp.matrix.tolist(), f, indent=4)
 
 

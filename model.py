@@ -19,6 +19,7 @@ class Generator(nn.Module):
         #     layers.append(nn.ReLU())
         #     return layers
 
+        self.d = csp_shape['d']
         self.sat_matrix_size = csp_shape['n']*csp_shape['d']
 
         self.conv = nn.Sequential(
@@ -35,9 +36,10 @@ class Generator(nn.Module):
         self.dense = nn.Sequential(
             nn.Linear(4096576,self.sat_matrix_size),
             nn.ReLU(),
-            nn.Linear(self.sat_matrix_size, self.sat_matrix_size**2),
-            nn.Tanh()
+            nn.Linear(self.sat_matrix_size, (self.sat_matrix_size**2)*self.d),
+            nn.Sigmoid()
         )
+
 
     def forward(self, x):
         x = self.conv(x)
@@ -46,8 +48,10 @@ class Generator(nn.Module):
         x = x.view(x.size()[0], -1)
 
         x = self.dense(x)
-        out = x.view(x.shape[0], self.sat_matrix_size, -1)
+        x = x.view(x.shape[0], self.sat_matrix_size, -1)
 
+        out = torch.where(x < 0.5, torch.zeros(x.shape), torch.ones(x.shape))
+        
         return out
 
 class Discriminator(nn.Module):
@@ -69,7 +73,6 @@ class Discriminator(nn.Module):
             nn.BatchNorm1d(8),
             nn.MaxPool1d(kernel_size=3),
             nn.ReLU(),
-
         )
 
         self.dense = nn.Sequential(
@@ -133,6 +136,9 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
 
     # label each assignment with its satisfiability
     fake_batch = torch.cat((assignments.type(torch.float), consistency.type(torch.float)),1)
+
+    print('Real batch sat: ', batch[:, 0, 20])
+    print('Fake batch sat: ', fake_batch[:, 20])
 
     # computing the loss
     fake_batch.unsqueeze_(1)
