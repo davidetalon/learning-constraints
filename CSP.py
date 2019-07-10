@@ -123,8 +123,8 @@ class CSP():
         Returns:
             tensor of size (Batch, 1) which has 1 in i-th position if the i-th assignment satisfies the CSP
         """
-        # TODO:CHECK CONSISTENCY nonzero returns two arrays with indexes of non zero elements - not pairs of elements
-        disallawed =torch.nonzero()
+
+        disallawed =torch.nonzero(matrix>=1)
 
         consistency = torch.ones(assignment.shape[0], 1, dtype=torch.int64)
 
