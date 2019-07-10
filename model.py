@@ -108,24 +108,28 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
         float indicating the batch loss
     """
 
+    ############################
+    # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+    ###########################
+    discr_optimizer = optimizer['discr']
+    discr_optimizer.zero_grad()
 
     # labels
     real = torch.ones(batch.shape[0], 1)
     fake = torch.zeros(batch.shape[0], 1)
+
+    # computing the loss
+    output = discr(batch)
+    real_loss = loss_fn(output, real)
+
+    D_x = output.mean().item()
+    real_loss.backward()
 
     # generate the CSP
     mean = torch.zeros(batch.shape[0], 1, 256, 256)
     variance = torch.ones(batch.shape[0], 1, 256, 256)
     rnd_assgn = torch.normal(mean, variance)
 
-    # -----------------
-    #  Train Generator
-    # -----------------
-
-    gen_optimizer = optimizer['gen']
-    gen_optimizer.zero_grad()
-
-    # generate the fake csp
     fake_csp = gen(rnd_assgn)
 
     # get random assignment and check for consistency
@@ -137,35 +141,104 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     # label each assignment with its satisfiability
     fake_batch = torch.cat((assignments.type(torch.float), consistency.type(torch.float)),1)
 
-    print('Real batch sat: ', batch[:, 0, 20])
-    print('Fake batch sat: ', fake_batch[:, 20])
-
-    # computing the loss
     fake_batch.unsqueeze_(1)
 
-    gen_loss = loss_fn(discr(fake_batch), real)
+    output = discr(fake_batch.detach())
+    fake_loss = loss_fn(output, fake)
 
-    # optimizing
-    gen_loss.backward()
-    gen_optimizer.step()
+    fake_loss.backward()
+    D_G_z1 = output.mean().item()
 
-    # ---------------------
-    #  Train Discriminator
-    # ---------------------
+    discr_loss = real_loss + fake_loss
 
-    discr_optimizer = optimizer['discr']
-    discr_optimizer.zero_grad()
-
-    # computing the loss
-    real_loss = loss_fn(discr(batch), real)
-    fake_loss = loss_fn(discr(fake_batch), fake)
-    discr_loss = (real_loss + fake_loss) /2
-
-    # optimizing
-    discr_loss.backward()
     discr_optimizer.step()
 
-    return gen_loss, discr_loss
+    ############################
+    # (2) Update G network: maximize log(D(G(z)))
+    ###########################
+
+    gen_optimizer = optimizer['gen']
+    gen_optimizer.zero_grad()
+
+    output = discr(fake_batch)
+    gen_loss = loss_fn(output, real)
+
+    D_G_z2 = output.mean().item()
+    gen_loss.backward()
+
+    gen_optimizer.step()
+
+
+
+
+
+    # # optimizing
+    # gen_loss.backward()
+
+
+
+
+
+
+
+
+    # # labels
+    # real = torch.ones(batch.shape[0], 1)
+    # fake = torch.zeros(batch.shape[0], 1)
+
+    # # generate the CSP
+    # mean = torch.zeros(batch.shape[0], 1, 256, 256)
+    # variance = torch.ones(batch.shape[0], 1, 256, 256)
+    # rnd_assgn = torch.normal(mean, variance)
+
+    # # -----------------
+    # #  Train Generator
+    # # -----------------
+
+    # gen_optimizer = optimizer['gen']
+    # gen_optimizer.zero_grad()
+
+    # # generate the fake csp
+    # fake_csp = gen(rnd_assgn)
+
+    # # get random assignment and check for consistency
+    # assignments = torch.randint(0, csp_size['d'], (batch.shape[0], csp_size['n']))
+
+    # # check consistency
+    # consistency = CSP.matrix_assignment_consistency(assignments, fake_csp, csp_size['d'], csp_size['n'])
+
+    # # label each assignment with its satisfiability
+    # fake_batch = torch.cat((assignments.type(torch.float), consistency.type(torch.float)),1)
+
+    # print('Real batch sat: ', batch[:, 0, 20])
+    # print('Fake batch sat: ', fake_batch[:, 20])
+
+    # # computing the loss
+    # fake_batch.unsqueeze_(1)
+
+    # gen_loss = loss_fn(discr(fake_batch), real)
+
+    # # optimizing
+    # gen_loss.backward()
+    # gen_optimizer.step()
+
+    # # ---------------------
+    # #  Train Discriminator
+    # # ---------------------
+
+    # discr_optimizer = optimizer['discr']
+    # discr_optimizer.zero_grad()
+
+    # # computing the loss
+    # real_loss = loss_fn(discr(batch), real)
+    # fake_loss = loss_fn(discr(fake_batch), fake)
+    # discr_loss = (real_loss + fake_loss) /2
+
+    # # optimizing
+    # discr_loss.backward()
+    # discr_optimizer.step()
+
+    return gen_loss, discr_loss, D_x, D_G_z1, D_G_z2
 
 
 from CSP import CSP
@@ -207,7 +280,7 @@ if __name__ == "__main__":
         # observe 4th batch and stop.
         if i_batch == 2:
             
-            train_batch(generator, discriminator, sample_batched, csp_shape, adversarial_loss, optimizer)
+            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2 = train_batch(generator, discriminator, sample_batched, csp_shape, adversarial_loss, optimizer)
 
             break
 

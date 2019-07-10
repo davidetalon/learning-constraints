@@ -70,9 +70,7 @@ if __name__ == '__main__':
     print("###############")
     print("Start training")
     for epoch in range(args.num_epochs):
-        print('##################################')
-        print('## EPOCH %d' % (epoch + 1))
-        print('##################################')
+
         # Iterate batches
         for i, batch_sample in enumerate(dataloader):
 
@@ -80,9 +78,10 @@ if __name__ == '__main__':
             batch = batch_sample.to(device)
 
             # Update network
-            batch_loss_gen, batch_loss_discr = train_batch(generator, discriminator, batch, \
+            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2= train_batch(generator, discriminator, batch, \
                 csp_shape, adversarial_loss, optimizer)
-            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"% (epoch + 1, args.num_epochs, i+1, len(dataloader), batch_loss_discr.item(), batch_loss_gen.item()))
+            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
+            % (epoch + 1, args.num_epochs, i+1, len(dataloader), gen_loss.item(), discr_loss.item(), D_x, D_G_z1, D_G_z2))
 
     #Save all needed parameters
     print("###############")

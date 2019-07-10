@@ -18,7 +18,6 @@ class CSP():
                 p: parameter for the tightness of each constraint
 
         """
-
         self.k = k
         self.n = n
         self.d = int(math.ceil(math.pow(n, alpha)))
@@ -122,16 +121,16 @@ class CSP():
             matrix: tensor representing the CSP (Batch, Domain*Variables, Domain*Variables)
 
         Returns:
-            tensor of size (Batch, 1) which has 1 in i-th position if the i-th assignment do not satisfy the CSP
+            tensor of size (Batch, 1) which has 1 in i-th position if the i-th assignment satisfies the CSP
         """
-
-        disallawed =torch.nonzero(matrix >= 1)
+        # TODO:CHECK CONSISTENCY nonzero returns two arrays with indexes of non zero elements - not pairs of elements
+        disallawed =torch.nonzero()
 
         consistency = torch.ones(assignment.shape[0], 1, dtype=torch.int64)
 
         for assgn in range(assignment.shape[0]):
             for x in disallawed:
-                if (assignment[assgn][x[1]//d] == x[0]%d and assignment[assgn][x[1]//d]==x[1]%d):
+                if (assignment[assgn][x[0]//d] == x[0]%d and assignment[assgn][x[1]//d]==x[1]%d):
                     consistency[assgn] = 0
                     break
         return consistency
