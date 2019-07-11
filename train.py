@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader, Dataset
 from model import Generator, Discriminator, train_batch
 import json
 from pathlib import Path
+import time
 # create the parser
 parser = argparse.ArgumentParser(description='Train the CSP GAN')
 
@@ -38,8 +39,6 @@ if __name__ == '__main__':
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
-    
-
     # retrieving data
     n = dataset.csp.n
     m = dataset.csp.m
@@ -50,7 +49,6 @@ if __name__ == '__main__':
     layers_num = 4
 
     # define the architecture
-    print("###############")
     print("Initializing the model")
     generator = Generator(gen_input_size, hidden_units, layers_num,  csp_shape)
     generator.to(device)
@@ -67,7 +65,6 @@ if __name__ == '__main__':
     optimizer = {'gen': g_optimizer, 'discr':d_optimizer}
 
 
-    print("###############")
     print("Start training")
     for epoch in range(args.num_epochs):
 
@@ -75,16 +72,18 @@ if __name__ == '__main__':
         for i, batch_sample in enumerate(dataloader):
 
             # moving to device
-            batch = batch_sample.to(device)
+            # batch = batch_sample.to(device)
+            batch = batch_sample
 
             # Update network
+            start = time.time()
             gen_loss, discr_loss, D_x, D_G_z1, D_G_z2= train_batch(generator, discriminator, batch, \
                 csp_shape, adversarial_loss, optimizer)
-            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
-            % (epoch + 1, args.num_epochs, i+1, len(dataloader), gen_loss.item(), discr_loss.item(), D_x, D_G_z1, D_G_z2))
+            end = time.time()
+            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
+            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), gen_loss.item(), discr_loss.item(), D_x, D_G_z1, D_G_z2))
 
     #Save all needed parameters
-    print("###############")
     print("Saving parameters")
     # Create output dir
     out_dir = Path(args.out_dir)

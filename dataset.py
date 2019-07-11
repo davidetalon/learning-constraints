@@ -1,6 +1,9 @@
-from CSP import CSP
+from csp import CSP, matrix_assignment_consistency
 import torch
 from torch.utils.data import Dataset
+from solver import CSPSolver, solutionGatherer
+import numpy as np
+import time
 
 class CSPDataset(Dataset):
     """
@@ -24,26 +27,35 @@ class CSPDataset(Dataset):
 
         self.transform = transform
         self.csp = CSP(k, n, alpha, r, p)
+        solv = CSPSolver(self.csp.n, self.csp.d, self.csp.matrix, 4)
         self.assignments = self.csp.generate_rnd_assignment(size)
+
+        # add satisfying assingnments
+        if solv.solution_count()>0:
+            satisfying_assignments = solv.get_satisfying_assignments()
+            print(satisfying_assignments.shape, self.assignments.shape)
+            self.assignments = np.concatenate((self.assignments, satisfying_assignments), axis=0)
         
 
-    """
+
+    def __len__(self):
+        """
         Compute the length of the dataset
 
         Returns:
             returns the size of the dataset
-    """
-    def __len__(self):
+        """
         return self.assignments.shape[0]
 
 
-    """
+
+    def __getitem__(self, idx):
+        """
         Get item of index idx from the dataset
         
         Returns:
             returns the element of the dataset of index idx
-    """
-    def __getitem__(self, idx):
+        """
         sample = self.assignments[idx]
 
         if self.transform:
@@ -52,7 +64,7 @@ class CSPDataset(Dataset):
         sample_unsqueezed = torch.unsqueeze(sample, 0)
 
         # check consistency
-        consistency = CSP.matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
+        consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
 
         # label each sample with its consistency
         sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
@@ -60,11 +72,9 @@ class CSPDataset(Dataset):
 
         return sample
 
-# TODO: boosting data with partial assignments?!
-# need to have assignments with associated variables or "NaN" values?
 class ToTensor(object):
     """
-        Convert CSP assignments to tensors
+    Convert CSP assignments to tensors
 
     """
     def __call__(self, sample):

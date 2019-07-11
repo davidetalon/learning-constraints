@@ -1,23 +1,20 @@
 import torch.nn as nn
 import numpy as np
 import torch
-from CSP import CSP
+from csp import CSP,  matrix_assignment_consistency
+from solver import CSPSolver
+
 
 class Generator(nn.Module):
 
-    def block(input_size, out_size):
-            layers =[nn.Linear(input_size, out_size)]
-            layers.append(nn.ReLU())
-            return layers
+    # def block(input_size, out_size):
+    #         layers =[nn.Linear(input_size, out_size)]
+    #         layers.append(nn.ReLU())
+    #         return layers
 
     def __init__(self, input_size, hidden_units, layers_num, csp_shape, dropout_prob= 0):
 
         super().__init__()
-
-        # def block(input_size, out_size):
-        #     layers =[nn.Linear(input_size, out_size)]
-        #     layers.append(nn.ReLU())
-        #     return layers
 
         self.d = csp_shape['d']
         self.sat_matrix_size = csp_shape['n']*csp_shape['d']
@@ -34,9 +31,9 @@ class Generator(nn.Module):
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(4096576,self.sat_matrix_size),
+            nn.Linear(1000000,self.sat_matrix_size),
             nn.ReLU(),
-            nn.Linear(self.sat_matrix_size, (self.sat_matrix_size**2)*self.d),
+            nn.Linear(self.sat_matrix_size, self.sat_matrix_size*self.sat_matrix_size),
             nn.Sigmoid()
         )
 
@@ -48,10 +45,11 @@ class Generator(nn.Module):
         x = x.view(x.size()[0], -1)
 
         x = self.dense(x)
-        x = x.view(x.shape[0], self.sat_matrix_size, -1)
+
+        x = x.view(x.size()[0], self.sat_matrix_size, -1)
 
         out = torch.where(x < 0.5, torch.zeros(x.shape), torch.ones(x.shape))
-        
+
         return out
 
 class Discriminator(nn.Module):
@@ -123,26 +121,36 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     real_loss = loss_fn(output, real)
 
     D_x = output.mean().item()
+    
     real_loss.backward()
 
     # generate the CSP
-    mean = torch.zeros(batch.shape[0], 1, 256, 256)
-    variance = torch.ones(batch.shape[0], 1, 256, 256)
+    mean = torch.zeros(batch.shape[0], 1, 128, 128)
+    variance = torch.ones(batch.shape[0], 1, 128, 128)
     rnd_assgn = torch.normal(mean, variance)
 
     fake_csp = gen(rnd_assgn)
 
-    # get random assignment and check for consistency
-    assignments = torch.randint(0, csp_size['d'], (batch.shape[0], csp_size['n']))
+    # let's solve each problem with a solution
+    n = int(csp_size['n'])
+    d = int(csp_size['d'])
 
-    # check consistency
-    consistency = CSP.matrix_assignment_consistency(assignments, fake_csp, csp_size['d'], csp_size['n'])
+    assignment = np.empty((fake_csp.shape[0], n+1))
+    for csp in range(fake_csp.shape[0]):
+        solver = CSPSolver(n, d, fake_csp[csp, :, :], limit=1)
+        if solver.solution_count()>=1:
+            assgn = solver.get_satisfying_assignments(n=1)
+            assgn = np.append(assgn, 1)
 
-    # label each assignment with its satisfiability
-    fake_batch = torch.cat((assignments.type(torch.float), consistency.type(torch.float)),1)
+        else:
+            assgn = np.random.randint(0, d-1, n)
+            assgn = np.append(assgn, 0)
+        assignment[csp, :] = assgn[:]
 
+    fake_batch = torch.from_numpy(assignment)
     fake_batch.unsqueeze_(1)
-
+    fake_batch = fake_batch.type(torch.float)
+    
     output = discr(fake_batch.detach())
     fake_loss = loss_fn(output, fake)
 
@@ -156,7 +164,6 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     ############################
     # (2) Update G network: maximize log(D(G(z)))
     ###########################
-
     gen_optimizer = optimizer['gen']
     gen_optimizer.zero_grad()
 
@@ -168,80 +175,10 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
 
     gen_optimizer.step()
 
-
-
-
-
-    # # optimizing
-    # gen_loss.backward()
-
-
-
-
-
-
-
-
-    # # labels
-    # real = torch.ones(batch.shape[0], 1)
-    # fake = torch.zeros(batch.shape[0], 1)
-
-    # # generate the CSP
-    # mean = torch.zeros(batch.shape[0], 1, 256, 256)
-    # variance = torch.ones(batch.shape[0], 1, 256, 256)
-    # rnd_assgn = torch.normal(mean, variance)
-
-    # # -----------------
-    # #  Train Generator
-    # # -----------------
-
-    # gen_optimizer = optimizer['gen']
-    # gen_optimizer.zero_grad()
-
-    # # generate the fake csp
-    # fake_csp = gen(rnd_assgn)
-
-    # # get random assignment and check for consistency
-    # assignments = torch.randint(0, csp_size['d'], (batch.shape[0], csp_size['n']))
-
-    # # check consistency
-    # consistency = CSP.matrix_assignment_consistency(assignments, fake_csp, csp_size['d'], csp_size['n'])
-
-    # # label each assignment with its satisfiability
-    # fake_batch = torch.cat((assignments.type(torch.float), consistency.type(torch.float)),1)
-
-    # print('Real batch sat: ', batch[:, 0, 20])
-    # print('Fake batch sat: ', fake_batch[:, 20])
-
-    # # computing the loss
-    # fake_batch.unsqueeze_(1)
-
-    # gen_loss = loss_fn(discr(fake_batch), real)
-
-    # # optimizing
-    # gen_loss.backward()
-    # gen_optimizer.step()
-
-    # # ---------------------
-    # #  Train Discriminator
-    # # ---------------------
-
-    # discr_optimizer = optimizer['discr']
-    # discr_optimizer.zero_grad()
-
-    # # computing the loss
-    # real_loss = loss_fn(discr(batch), real)
-    # fake_loss = loss_fn(discr(fake_batch), fake)
-    # discr_loss = (real_loss + fake_loss) /2
-
-    # # optimizing
-    # discr_loss.backward()
-    # discr_optimizer.step()
-
     return gen_loss, discr_loss, D_x, D_G_z1, D_G_z2
 
 
-from CSP import CSP
+from csp import CSP
 from dataset import CSPDataset, ToTensor
 from torch.utils.data import DataLoader, Dataset
 import torch

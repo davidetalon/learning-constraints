@@ -1,4 +1,4 @@
-from CSP import CSP
+from csp import CSP
 from ortools.sat.python.cp_model import CpModel, CpSolver, CpSolverSolutionCallback
 import numpy as np
 
@@ -31,13 +31,16 @@ class solutionGatherer(CpSolverSolutionCallback):
     def get_solutions(self):
         return np.array(self.solutions)
 
-class Solver(object):
 
-    def __init__(self, csp, limit=40):
+class CSPSolver(object):
+
+    def __init__(self, n=20, d=4, matrix=None, limit=40):
 
         # getting csp
-        self.csp = csp
-
+        self.n = n
+        self.d = d
+        self.matrix = matrix
+        
         # initializing the model
         self.model = CpModel()
 
@@ -45,7 +48,7 @@ class Solver(object):
         self.variables = self.add_variables()
 
         # adding constraints
-        self.add_disallawed_assignments(self.csp.matrix)
+        self.add_disallawed_assignments(self.matrix)
 
         solver = cp_model.CpSolver()
         self.gatherer = solutionGatherer(self.variables, limit)
@@ -59,9 +62,9 @@ class Solver(object):
         Returns:
             returns the variables added to the CpModel
         """
-        variables = [None] * self.csp.n
-        for i in range(self.csp.n):
-            variables[i] = self.model.NewIntVar(0, self.csp.d-1, 'x'+str(i))
+        variables = [None] * self.n
+        for i in range(self.n):
+            variables[i] = self.model.NewIntVar(0, self.d-1, 'x'+str(i))
             
         return variables
 
@@ -75,7 +78,7 @@ class Solver(object):
             matrix: matrix with forbidden assignments
         """
 
-        d = self.csp.d
+        d = self.d
         disallowed = np.nonzero(matrix)
         for ix in range(disallowed[0].shape[0]):
             scope = [self.variables[disallowed[0][ix]//d], self.variables[disallowed[1][ix]//d]]
@@ -131,9 +134,9 @@ if __name__=='__main__':
 
     # creating the csp
     csp = CSP(k=2, n=24, alpha=1.0, r=1.4, p=0.5)
- 
+    
     # initiate Solver
-    solv = Solver(csp, 4)
+    solv = CSPSolver(csp.n, csp.d, csp.matrix, limit=4)
 
     print(solv.solution_count())
 
