@@ -223,11 +223,3 @@ if __name__ == "__main__":
     assignment = np.random.randint(0,csp.d, 20)
     print(assignment)
     print(csp.check_consistent_assgn(assignment, csp))
-
-
-
-
-
-
-
-    
