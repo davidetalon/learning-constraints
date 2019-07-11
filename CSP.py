@@ -1,9 +1,9 @@
 import numpy as np
 import math
-import CSP
 import torch
+import time
 
-class CSP():
+class CSP(object):
 
     def __init__(self, k, n, alpha, r, p):
 
@@ -111,29 +111,32 @@ class CSP():
             
         return {'scopes':scopes, 'values': values}
 
-    def matrix_assignment_consistency(assignment, matrix, d, n):
+def matrix_assignment_consistency(assignment, matrix, d, n):
 
-        """
-        Check if the given CSP matrix is satisfied by the assignment
+    """
+    Check if the given CSP matrix is satisfied by the assignment
 
-        Args:
-            assignment: tensor containing the batch of assignments (Batch, Variables)
-            matrix: tensor representing the CSP (Batch, Domain*Variables, Domain*Variables)
+    Args:
+        assignment: tensor containing the batch of assignments (Batch, Variables)
+        matrix: tensor representing the CSP (Batch, Domain*Variables, Domain*Variables)
 
-        Returns:
-            tensor of size (Batch, 1) which has 1 in i-th position if the i-th assignment satisfies the CSP
-        """
+    Returns:
+        tensor of size (Batch, 1) which has 1 in i-th position if the i-th assignment satisfies the CSP
+    """
 
-        disallawed =torch.nonzero(matrix>=1)
+    disallawed =torch.nonzero(matrix)
+    consistency = torch.ones(assignment.shape[0], 1, dtype=torch.int8)
 
-        consistency = torch.ones(assignment.shape[0], 1, dtype=torch.int64)
+    for assgn in range(assignment.shape[0]):
+        for x in disallawed:
+            if (assignment[assgn][x[0]//d] == x[0]%d and assignment[assgn][x[1]//d]==x[1]%d):
+                consistency[assgn] = 0
+                break
+   
 
-        for assgn in range(assignment.shape[0]):
-            for x in disallawed:
-                if (assignment[assgn][x[0]//d] == x[0]%d and assignment[assgn][x[1]//d]==x[1]%d):
-                    consistency[assgn] = 0
-                    break
-        return consistency
+
+    return consistency    
+        
 
         
 def choose_without_rep(n, k):
