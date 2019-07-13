@@ -4,15 +4,14 @@ import torch
 from csp import CSP,  matrix_assignment_consistency
 from solver import CSPSolver
 
+def init_weights(m):
+    if type(m) == nn.Conv2d:
+        torch.nn.init.normal(m.weight, 0.0,0.02)
+        m.bias.data.fill_(0.01)
 
 class Generator(nn.Module):
 
-    # def block(input_size, out_size):
-    #         layers =[nn.Linear(input_size, out_size)]
-    #         layers.append(nn.ReLU())
-    #         return layers
-
-    def __init__(self, input_size, hidden_units, layers_num, csp_shape, dropout_prob= 0):
+    def __init__(self, input_size, csp_shape, dropout_prob= 0):
 
         super().__init__()
 
@@ -21,21 +20,22 @@ class Generator(nn.Module):
 
         self.conv = nn.Sequential(
             nn.BatchNorm2d(1),
-            nn.Conv2d(1, out_channels=16, kernel_size=3, stride=1),
+            nn.ConvTranspose2d( 1, out_channels=16, kernel_size=3, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(16, 16, kernel_size=3, stride=1),
-            nn.BatchNorm2d(16),
+            nn.ConvTranspose2d( 16, out_channels=32, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(32),
             nn.ReLU()
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(1000000,self.sat_matrix_size),
+            nn.Linear(557568, self.sat_matrix_size),
             nn.ReLU(),
             nn.Linear(self.sat_matrix_size, self.sat_matrix_size*self.sat_matrix_size),
             nn.Sigmoid()
         )
+
+        self.conv.apply(init_weights)
 
 
     def forward(self, x):
@@ -55,28 +55,30 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
 
 
-    def __init__(self, input_size, hidden_units, layers_num, out_size, dropout_prob= 0):
+    def __init__(self, input_size, out_size, dropout_prob= 0):
         super().__init__()
 
         self.model = nn.Sequential(
-            nn.Conv1d(1, out_channels=32, kernel_size=7, stride=1),
-            nn.BatchNorm1d(32),
-            nn.MaxPool1d(kernel_size=3,stride=1),
-            nn.ReLU(),
-            nn.Conv1d(32, out_channels=16, kernel_size=3, stride=1),
+            nn.Conv1d(1, out_channels=16, kernel_size=5, stride=2),
             nn.BatchNorm1d(16),
-            nn.MaxPool1d(kernel_size=3),
             nn.ReLU(),
-            nn.Conv1d(16, out_channels=8, kernel_size=3, stride=1),
-            nn.BatchNorm1d(8),
-            nn.MaxPool1d(kernel_size=3),
+            nn.Dropout(0.3),
+            nn.Conv1d(16, out_channels=32, kernel_size=3, stride=2),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Conv1d(32, out_channels=64, kernel_size=3, stride=2),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.3)
+            
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(8, 64),
+            nn.Linear(128, 32),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Dropout(0.5),
+            nn.Linear(32, 1),
             nn.Sigmoid() 
         )
 
@@ -203,8 +205,8 @@ if __name__ == "__main__":
     hidden_units = 256
     layers_num = 4
 
-    generator = Generator(gen_input_size, hidden_units, layers_num,  csp_shape)
-    discriminator = Discriminator(dataset.csp.n, hidden_units, layers_num, 2)
+    generator = Generator(gen_input_size, csp_shape)
+    discriminator = Discriminator(dataset.csp.n, 2)
 
     adversarial_loss = torch.nn.BCELoss()
 

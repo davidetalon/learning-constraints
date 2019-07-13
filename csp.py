@@ -25,7 +25,7 @@ class CSP(object):
         self.n_bad_assgn = int(math.ceil(p * math.pow(self.d, self.k)))
 
         constraints = self.generate_CSP(alpha, r, p)
-
+        # TODO: CHECK SIZE OF THE ASSIGNMENT
         matrix_csp = constraints2matrix(constraints, self.n, self.d)
 
         self.constraints = constraints
@@ -111,7 +111,7 @@ class CSP(object):
             
         return {'scopes':scopes, 'values': values}
 
-def matrix_assignment_consistency(assignment, matrix, d, n):
+def matrix_assignment_consistency(assignment, matrix, d):
 
     """
     Check if the given CSP matrix is satisfied by the assignment

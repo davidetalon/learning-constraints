@@ -27,14 +27,13 @@ class CSPDataset(Dataset):
 
         self.transform = transform
         self.csp = CSP(k, n, alpha, r, p)
-        solv = CSPSolver(self.csp.n, self.csp.d, self.csp.matrix, 4)
-        self.assignments = self.csp.generate_rnd_assignment(size)
+        solv = CSPSolver(self.csp.n, self.csp.d, self.csp.matrix, limit=50)
 
-        # add satisfying assingnments
-        if solv.solution_count()>0:
-            satisfying_assignments = solv.get_satisfying_assignments()
-            print(satisfying_assignments.shape, self.assignments.shape)
-            self.assignments = np.concatenate((self.assignments, satisfying_assignments), axis=0)
+        if solv.solution_count() == 0:
+            raise Exception('No solutions found')
+
+        satisfying_assignments = solv.get_satisfying_assignments()
+        self.assignments  = satisfying_assignments
         
 
 
@@ -64,7 +63,7 @@ class CSPDataset(Dataset):
         sample_unsqueezed = torch.unsqueeze(sample, 0)
 
         # check consistency
-        consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
+        consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d)
 
         # label each sample with its consistency
         sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
@@ -79,7 +78,6 @@ class ToTensor(object):
     """
     def __call__(self, sample):
         return torch.from_numpy(sample).float()
-
 
 from torch.utils.data import DataLoader
 
