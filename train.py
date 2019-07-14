@@ -2,7 +2,7 @@ import argparse
 import torch
 from dataset import ToTensor, CSPDataset
 from torch.utils.data import DataLoader, Dataset
-from model import Generator, Discriminator, train_batch
+from model import Generator, Discriminator, train_batch, weights_init
 import json
 from pathlib import Path
 import time
@@ -58,6 +58,9 @@ if __name__ == '__main__':
     discriminator = Discriminator(csp_shape['n'], 2)
     discriminator.to(device)
 
+    generator.apply(weights_init)
+    discriminator.apply(weights_init)
+
     # loss
     adversarial_loss = torch.nn.BCELoss()
 
@@ -96,7 +99,7 @@ if __name__ == '__main__':
 
             end = time.time()
             print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
-            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), gen_loss.item(), discr_loss.item(), D_x, D_G_z1, D_G_z2))
+            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss.item(), gen_loss.item(), D_x, D_G_z1, D_G_z2))
 
     # count the number of wrong non-sat assignments
     
@@ -110,10 +113,12 @@ if __name__ == '__main__':
         variance = torch.ones(1, 1, 128, 128)
         rnd_assgn = torch.normal(mean, variance)
 
-        out = generator(rnd_assgn)
+        csp, assgn = generator(rnd_assgn)
     
-    accuracy = torch.sum((torch.from_numpy(dataset.csp.matrix).type(torch.float) - out).pow(2)).item()
-    accuracy = accuracy/(576*576)
+    errors = torch.sum((torch.from_numpy(dataset.csp.matrix).type(torch.float) - csp).pow(2)).item()
+
+    matrix_size = csp_shape['n']*csp_shape['d']
+    accuracy = ((matrix_size**2) - accuracy)/matrix_size**2
     print(accuracy)
     #Save all needed parameters
     print("Saving parameters")

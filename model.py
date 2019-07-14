@@ -3,11 +3,15 @@ import numpy as np
 import torch
 from csp import CSP,  matrix_assignment_consistency
 from solver import CSPSolver
+import math
 
-def init_weights(m):
-    if type(m) == nn.Conv2d:
-        torch.nn.init.normal(m.weight, 0.0,0.02)
-        m.bias.data.fill_(0.01)
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
 
 class Generator(nn.Module):
 
@@ -16,26 +20,39 @@ class Generator(nn.Module):
         super().__init__()
 
         self.d = csp_shape['d']
+        self.n = csp_shape['n']
         self.sat_matrix_size = csp_shape['n']*csp_shape['d']
 
         self.conv = nn.Sequential(
             nn.BatchNorm2d(1),
-            nn.ConvTranspose2d( 1, out_channels=16, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d( 1, out_channels=8, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(8),
+            nn.ReLU(),
+            nn.ConvTranspose2d( 8, out_channels=16, kernel_size=3, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.ConvTranspose2d( 16, out_channels=32, kernel_size=3, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d( 32, out_channels=64, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d( 64, out_channels=128, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(128),
             nn.ReLU()
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(557568, self.sat_matrix_size),
+            nn.Linear(2437632, 512),
             nn.ReLU(),
-            nn.Linear(self.sat_matrix_size, self.sat_matrix_size*self.sat_matrix_size),
-            nn.Sigmoid()
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, self.sat_matrix_size*self.sat_matrix_size + csp_shape['n']*self.d + 1)
         )
 
-        self.conv.apply(init_weights)
+        self.softmax = nn.Softmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
+
 
 
     def forward(self, x):
@@ -46,11 +63,31 @@ class Generator(nn.Module):
 
         x = self.dense(x)
 
-        x = x.view(x.size()[0], self.sat_matrix_size, -1)
+        print(x.shape)
+        matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
+        print(matrix.shape)
+        matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
+        matrix = torch.where(matrix < 0.5, torch.zeros(matrix.shape), torch.ones(matrix.shape))
+        print('matrix', matrix.shape)
 
-        out = torch.where(x < 0.5, torch.zeros(x.shape), torch.ones(x.shape))
+        assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n * self.d)
+        assignments = assignments.view(assignments.size()[0], -1, self.n,)
+        assignments = self.softmax(assignments)
+        assignments = torch.argmax(assignments, dim=1, keepdim=True)
+        print('assignment', assignments.shape)
 
-        return out
+        sat_label = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size + self.n * self.d, 1)
+        sat_label = sat_label.view(sat_label.size()[0], 1, -1)
+        sat_label = self.sigmoid(sat_label)
+        sat_label = torch.where(sat_label < 0.5, torch.zeros(sat_label.shape), torch.ones(sat_label.shape))
+
+        print('sat_labels', sat_label.shape)
+
+        print('ass ', type(assignments), ' sat', type(sat_label))
+        assignments = torch.cat((assignments.type(torch.float), sat_label.type(torch.float)), dim=-1)
+
+        print('cat', assignments.shape)
+        return matrix, assignments
 
 class Discriminator(nn.Module):
 
@@ -58,6 +95,7 @@ class Discriminator(nn.Module):
     def __init__(self, input_size, out_size, dropout_prob= 0):
         super().__init__()
 
+        self.input_size = input_size
         self.model = nn.Sequential(
             nn.Conv1d(1, out_channels=16, kernel_size=5, stride=2),
             nn.BatchNorm1d(16),
@@ -66,16 +104,14 @@ class Discriminator(nn.Module):
             nn.Conv1d(16, out_channels=32, kernel_size=3, stride=2),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Conv1d(32, out_channels=64, kernel_size=3, stride=2),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
             nn.Dropout(0.3)
-            
+
         )
 
+        size = 32 * math.floor((math.floor(((input_size-4)/2) + 1) - 3)/2 + 1)
+        print(size)
         self.dense = nn.Sequential(
-            nn.Linear(128, 32),
+            nn.Linear(size , 32),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(32, 1),
@@ -131,28 +167,38 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     variance = torch.ones(batch.shape[0], 1, 128, 128)
     rnd_assgn = torch.normal(mean, variance)
 
-    fake_csp = gen(rnd_assgn)
+    fake_csp, fake_batch = gen(rnd_assgn)
 
     # let's solve each problem with a solution
     n = int(csp_size['n'])
     d = int(csp_size['d'])
 
-    assignment = np.empty((fake_csp.shape[0], n+1))
-    for csp in range(fake_csp.shape[0]):
-        solver = CSPSolver(n, d, fake_csp[csp, :, :], limit=1)
-        if solver.solution_count()>=1:
-            assgn = solver.get_satisfying_assignments(n=1)
-            assgn = np.append(assgn, 1)
+    # assignment = np.empty((fake_csp.shape[0], n+1))
+    # for csp in range(fake_csp.shape[0]):
+    #     solver = CSPSolver(n, d, fake_csp[csp, :, :], limit=1)
+    #     if solver.solution_count()>=1:
+    #         assgn = solver.get_satisfying_assignments(n=1)
+    #         assgn = np.append(assgn, 1)
 
-        else:
-            assgn = np.random.randint(0, d-1, n)
-            assgn = np.append(assgn, 0)
-        assignment[csp, :] = assgn[:]
-
-    fake_batch = torch.from_numpy(assignment)
-    fake_batch.unsqueeze_(1)
-    fake_batch = fake_batch.type(torch.float)
+    #     else:
+    #         assgn = np.random.randint(0, d-1, n)
+    #         assgn = np.append(assgn, 0)
+    #     assignment[csp, :] = assgn[:]
     
+    # TODO:add non-sat assignments
+    # random_assignment = self.csp.generate_rnd_assignment(size)
+
+    #     # add satisfying assingnments
+    #     if solv.solution_count()>0:
+    #         satisfying_assignments = solv.get_satisfying_assignments()
+    #         print(satisfying_assignments.shape, self.assignments.shape)
+    #         self.assignments = np.concatenate((self.assignments, satisfying_assignments), axis=0)
+    # assignment = ass
+    # fake_batch = torch.from_numpy(assignment)
+    # fake_batch.unsqueeze_(1)
+    # fake_batch = fake_batch.type(torch.float)
+    
+    print(fake_batch.shape)
     output = discr(fake_batch.detach())
     fake_loss = loss_fn(output, fake)
 

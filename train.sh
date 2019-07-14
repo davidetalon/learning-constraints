@@ -7,7 +7,7 @@ python train.py \
 --p=0.5 \
 --seed=30 \
 --gen_lr=0.0002 \
---discr_lr=0.0002 \
+--discr_lr=0.0001 \
 --size=10000 \
---batch_size=4 \
---num_epochs=200 \
+--batch_size=16 \
+--num_epochs=1 \

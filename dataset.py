@@ -33,10 +33,25 @@ class CSPDataset(Dataset):
             raise Exception('No solutions found')
 
         satisfying_assignments = solv.get_satisfying_assignments()
-        self.assignments  = satisfying_assignments
+
         
 
+        # labeling sat assignments
+        sat_labels = np.ones((solv.solution_count(), 1))
+        sat_assignments =np.concatenate((satisfying_assignments, sat_labels), axis=1)
+        print('sat assgn', satisfying_assignments.shape, sat_labels.shape, sat_assignments.shape)
 
+        # getting random generated assignments
+        random_assignments = self.csp.generate_rnd_assignment(solv.solution_count()*8)
+
+        # labeling rnd assignments
+        consistency = consistency = matrix_assignment_consistency(torch.from_numpy(random_assignments), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
+        rnd_assignments = np.concatenate((random_assignments, consistency.numpy()), 1)
+
+        print('rnd assgn', random_assignments.shape, consistency.shape, rnd_assignments.shape)
+        self.assignments = np.concatenate((sat_assignments, rnd_assignments), 0)
+
+        print('final assignments: ', self.assignments.shape)
     def __len__(self):
         """
         Compute the length of the dataset
@@ -60,16 +75,17 @@ class CSPDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
 
+
         sample_unsqueezed = torch.unsqueeze(sample, 0)
 
-        # check consistency
-        consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d)
+        # # check consistency
+        # consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d)
 
-        # label each sample with its consistency
-        sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
-        sample.squeeze()
+        # # label each sample with its consistency
+        # sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
+        # sample.squeeze()
 
-        return sample
+        return sample_unsqueezed
 
 class ToTensor(object):
     """

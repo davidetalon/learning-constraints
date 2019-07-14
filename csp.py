@@ -111,7 +111,7 @@ class CSP(object):
             
         return {'scopes':scopes, 'values': values}
 
-def matrix_assignment_consistency(assignment, matrix, d):
+def matrix_assignment_consistency(assignment, matrix, d, n):
 
     """
     Check if the given CSP matrix is satisfied by the assignment
