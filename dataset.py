@@ -50,15 +50,15 @@ class CSPDataset(Dataset):
 
         print('rnd assgn', random_assignments.shape, consistency.shape, rnd_assignments.shape)
         self.assignments = np.concatenate((sat_assignments, rnd_assignments), 0)
-
+        
 
         # add random noise to assignments
-        random_increments = np.random.randint(-1, 1, size=self.assignments.shape)
-        random_increments[:, -1] = 0
+        # random_increments = np.random.randint(-1, 1, size=self.assignments.shape)
+        # random_increments[:, -1] = 0
 
-        self.assignments = np.add(self.assignments, random_increments)
-        consistency = matrix_assignment_consistency(torch.from_numpy(self.assignments[:, :-1]), torch.from_numpy(self.csp.matrix), int(self.csp.d), self.csp.n)
-        self.assignments[:, -1] = consistency
+        # self.assignments = np.add(self.assignments, random_increments)
+        # consistency = matrix_assignment_consistency(torch.from_numpy(self.assignments[:, :-1]), torch.from_numpy(self.csp.matrix), int(self.csp.d), self.csp.n)
+        # self.assignments[:, -1] = consistency
 
     def __len__(self):
         """

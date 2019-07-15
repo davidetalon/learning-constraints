@@ -2,7 +2,7 @@ import argparse
 import torch
 from dataset import ToTensor, CSPDataset
 from torch.utils.data import DataLoader, Dataset
-from model import Generator, Discriminator, train_batch, weights_init
+from model import Generator, Discriminator, train_batch, weights_init, printgradnorm
 import json
 from pathlib import Path
 import time
@@ -70,6 +70,12 @@ if __name__ == '__main__':
     d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=args.discr_lr, betas=(0.5, 0.999))
     optimizer = {'gen': g_optimizer, 'discr':d_optimizer}
 
+    # hooks to print gradients
+    # discriminator.model.register_forward_hook(printgradnorm)
+    # discriminator.dense.register_forward_hook(printgradnorm)
+    # generator.conv.register_forward_hook(printgradnorm)
+    # generator.dense.register_forward_hook(printgradnorm)
+
 
     print("Start training")
     gen_loss_history = []
@@ -77,6 +83,12 @@ if __name__ == '__main__':
     D_x_history = []
     D_G_z1_history = []
     D_G_z2_history = []
+
+    discr_top_grad =[]
+    discr_bottom_grad=[]
+    gen_top_grad = []
+    gen_bottom_grad = []
+
     for epoch in range(args.num_epochs):
 
         # Iterate batches
@@ -88,15 +100,21 @@ if __name__ == '__main__':
 
             # Update network
             start = time.time()
-            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2= train_batch(generator, discriminator, batch, \
+            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
                 csp_shape, adversarial_loss, optimizer)
 
+            print(discr_top.shape)
+            print(torch.sum(gen_bottom).item())
             # saving metrics
             gen_loss_history.append(gen_loss.item())
             discr_loss_history.append(discr_loss.item())
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
             D_G_z2_history.append(D_G_z1)
+            discr_top_grad.append(torch.sum(discr_top).item())
+            discr_bottom_grad.append(torch.sum(discr_bottom).item())
+            gen_top_grad.append(torch.sum(gen_top).item())
+            gen_bottom_grad.append(torch.sum(gen_bottom).item())
 
             end = time.time()
             print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
@@ -116,6 +134,8 @@ if __name__ == '__main__':
 
         csp, assgn = generator(rnd_assgn)
     
+    print('csp', dataset.csp.matrix.shape)
+    print('fake csp', csp.shape)
     errors = torch.sum((torch.from_numpy(dataset.csp.matrix).type(torch.float) - csp).pow(2)).item()
 
     matrix_size = csp_shape['n']*csp_shape['d']
@@ -146,7 +166,9 @@ if __name__ == '__main__':
     with open(out_dir / csp_file_name, 'w') as f:
         json.dump(dataset.csp.matrix.tolist(), f, indent=4)
     
-    metrics = {'n_sat_assignments':dataset.n_sat_assignments, 'acc':accuracy, 'gen_loss':gen_loss_history, 'discr_loss':discr_loss_history, 'D_x':D_x_history, 'D_G_z1':D_G_z1_history, 'D_G_z2':D_G_z2_history}
+    metrics = {'n_sat_assignments':dataset.n_sat_assignments, 'acc':accuracy, 'gen_loss':gen_loss_history, \
+        'discr_loss':discr_loss_history, 'D_x':D_x_history, 'D_G_z1':D_G_z1_history, 'D_G_z2':D_G_z2_history, \
+        'gen_top':gen_top_grad, 'gen_bottom':gen_bottom_grad, 'discr_top':discr_top_grad, 'discr_bottom':discr_bottom_grad}
     
     # Save metrics
     metric_file_name = 'metrics'+ date +'.json'
