@@ -50,6 +50,7 @@ class Generator(nn.Module):
             nn.Linear(512, self.sat_matrix_size*self.sat_matrix_size + csp_shape['n']*self.d + 1)
         )
 
+        self.tanh = nn.Tanh()
         self.softmax = nn.Softmax(dim=-1)
         self.sigmoid = nn.Sigmoid()
 
@@ -67,7 +68,8 @@ class Generator(nn.Module):
         matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
         print(matrix.shape)
         matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
-        matrix = torch.where(matrix < 0.5, torch.zeros(matrix.shape), torch.ones(matrix.shape))
+        matrix = self.tanh(x)
+        matrix = torch.where(matrix < 0.0, torch.zeros(matrix.shape), torch.ones(matrix.shape))
         print('matrix', matrix.shape)
 
         assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n * self.d)
@@ -99,11 +101,11 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(
             nn.Conv1d(1, out_channels=16, kernel_size=5, stride=2),
             nn.BatchNorm1d(16),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Dropout(0.3),
             nn.Conv1d(16, out_channels=32, kernel_size=3, stride=2),
             nn.BatchNorm1d(32),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Dropout(0.3)
 
         )
@@ -112,7 +114,7 @@ class Discriminator(nn.Module):
         print(size)
         self.dense = nn.Sequential(
             nn.Linear(size , 32),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Dropout(0.5),
             nn.Linear(32, 1),
             nn.Sigmoid() 
@@ -151,7 +153,7 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     discr_optimizer.zero_grad()
 
     # labels
-    real = torch.ones(batch.shape[0], 1)
+    real = torch.full((batch.shape[0], 1),fill_value=0.9)
     fake = torch.zeros(batch.shape[0], 1)
 
     # computing the loss
@@ -205,7 +207,7 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     fake_loss.backward()
     D_G_z1 = output.mean().item()
 
-    discr_loss = real_loss + fake_loss
+    discr_loss = (real_loss + fake_loss)/2
 
     discr_optimizer.step()
 

@@ -26,6 +26,7 @@ parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' G
 parser.add_argument('--batch_size',          type=int, default=16,    help='Dimension of the batch')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
 
+parser.add_argument('--save',             type=bool, default=False,    help='Save the generator and discriminator models')
 parser.add_argument('--out_dir',          type=str, default='models/',    help='Folder where to save the model')
 
 if __name__ == '__main__':
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     errors = torch.sum((torch.from_numpy(dataset.csp.matrix).type(torch.float) - csp).pow(2)).item()
 
     matrix_size = csp_shape['n']*csp_shape['d']
-    accuracy = ((matrix_size**2) - accuracy)/matrix_size**2
+    accuracy = ((matrix_size**2) - errors)/matrix_size**2
     print(accuracy)
     #Save all needed parameters
     print("Saving parameters")
@@ -128,10 +129,11 @@ if __name__ == '__main__':
     # Save network parameters
     date = datetime.datetime.now()
     date = date.strftime("%d-%m-%Y,%H-%M-%S")
-    gen_file_name = 'gen_params'+date+'.pth'
-    discr_file_name = 'discr_params'+date+'.pth'
-    torch.save(generator.state_dict(), out_dir / gen_file_name)
-    torch.save(discriminator.state_dict(), out_dir / discr_file_name)
+    if args.save:
+        gen_file_name = 'gen_params'+date+'.pth'
+        discr_file_name = 'discr_params'+date+'.pth'
+        torch.save(generator.state_dict(), out_dir / gen_file_name)
+        torch.save(discriminator.state_dict(), out_dir / discr_file_name)
 
 
     # Save training parameters
@@ -144,7 +146,7 @@ if __name__ == '__main__':
     with open(out_dir / csp_file_name, 'w') as f:
         json.dump(dataset.csp.matrix.tolist(), f, indent=4)
     
-    metrics = {'acc':accuracy, 'gen_loss':gen_loss_history, 'discr_loss':discr_loss_history, 'D_x':D_x_history, 'D_G_z1':D_G_z1_history, 'D_G_z2':D_G_z2_history}
+    metrics = {'n_sat_assignments':dataset.n_sat_assignments, 'acc':accuracy, 'gen_loss':gen_loss_history, 'discr_loss':discr_loss_history, 'D_x':D_x_history, 'D_G_z1':D_G_z1_history, 'D_G_z2':D_G_z2_history}
     
     # Save metrics
     metric_file_name = 'metrics'+ date +'.json'

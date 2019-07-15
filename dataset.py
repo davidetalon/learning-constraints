@@ -34,7 +34,7 @@ class CSPDataset(Dataset):
 
         satisfying_assignments = solv.get_satisfying_assignments()
 
-        
+        self.n_sat_assignments = solv.solution_count()
 
         # labeling sat assignments
         sat_labels = np.ones((solv.solution_count(), 1))
@@ -45,13 +45,21 @@ class CSPDataset(Dataset):
         random_assignments = self.csp.generate_rnd_assignment(solv.solution_count()*8)
 
         # labeling rnd assignments
-        consistency = consistency = matrix_assignment_consistency(torch.from_numpy(random_assignments), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
+        consistency = matrix_assignment_consistency(torch.from_numpy(random_assignments), torch.from_numpy(self.csp.matrix), self.csp.d, self.csp.n)
         rnd_assignments = np.concatenate((random_assignments, consistency.numpy()), 1)
 
         print('rnd assgn', random_assignments.shape, consistency.shape, rnd_assignments.shape)
         self.assignments = np.concatenate((sat_assignments, rnd_assignments), 0)
 
-        print('final assignments: ', self.assignments.shape)
+
+        # add random noise to assignments
+        random_increments = np.random.randint(-1, 1, size=self.assignments.shape)
+        random_increments[:, -1] = 0
+
+        self.assignments = np.add(self.assignments, random_increments)
+        consistency = matrix_assignment_consistency(torch.from_numpy(self.assignments[:, :-1]), torch.from_numpy(self.csp.matrix), int(self.csp.d), self.csp.n)
+        self.assignments[:, -1] = consistency
+
     def __len__(self):
         """
         Compute the length of the dataset
@@ -94,6 +102,7 @@ class ToTensor(object):
     """
     def __call__(self, sample):
         return torch.from_numpy(sample).float()
+  
 
 from torch.utils.data import DataLoader
 
