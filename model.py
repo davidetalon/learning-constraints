@@ -13,7 +13,17 @@ def weights_init(m):
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
 
-def printgradnorm(self, grad_input, grad_output):
+def printgradnorm_forward(self, grad_input, grad_output):
+    print('****** Forward HOOK ********')
+    print('Inside ' + self.__class__.__name__ + ' backward')
+    print('Inside class:' + self.__class__.__name__)
+    print('')
+    print('grad_input size:', grad_input[0].size())
+    print('grad_output size:', grad_output[0].size())
+    print('grad_input norm:', grad_input[0].norm())
+
+def printgradnorm_backward(self, grad_input, grad_output):
+    print('****** Backward HOOK ********')
     print('Inside ' + self.__class__.__name__ + ' backward')
     print('Inside class:' + self.__class__.__name__)
     print('')
@@ -61,9 +71,6 @@ class Generator(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
 
-
-
-
     def forward(self, x):
         x = self.conv(x)
 
@@ -75,18 +82,18 @@ class Generator(nn.Module):
         matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
         matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
         matrix = self.sigmoid(matrix)
-        matrix = torch.round(matrix)
+        # matrix = torch.round(matrix)
         # matrix = torch.where(matrix < 0.5, torch.zeros(matrix.shape, requires_grad=True), torch.ones(matrix.shape, requires_grad=True))
 
         assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n)
         assignments = assignments.view(assignments.size()[0], -1, self.n)
         assignments = self.relu(assignments)
-        assignments = torch.round(assignments)
+        # assignments = torch.round(assignments)
 
         sat_label = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size + self.n, 1)
         sat_label = sat_label.view(sat_label.size()[0], 1, -1)
         sat_label = self.sigmoid(sat_label)
-        sat_label = torch.round(sat_label)
+        # sat_label = torch.round(sat_label)
         # sat_label = torch.where(sat_label < 0.5, torch.zeros(sat_label.shape, requires_grad=True), torch.ones(sat_label.shape, requires_grad=True))
 
         labeled_assignments = torch.cat((assignments.type(torch.float), sat_label.type(torch.float)), dim=-1)
@@ -159,12 +166,16 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     # fake = torch.zeros(batch.shape[0], 1)
 
     # with flipped labels and smoothing
-    real = torch.empty((batch.shape[0],1)).uniform_(0,0.1)
-    fake = torch.empty((batch.shape[0],1)).uniform_(0.9, 1)
+    # real = torch.empty((batch.shape[0],1)).uniform_(0, 0.1)
+    # fake = torch.empty((batch.shape[0],1)).uniform_(0.9, 1)
+    real_label = 1
+    fake_label = 0
+    label = torch.full((batch.shape[0],), real_label)
+
 
     # computing the loss
     output = discr(batch)
-    real_loss = loss_fn(output, real)
+    real_loss = loss_fn(output, label)
 
     D_x = output.mean().item()
     
@@ -174,6 +185,7 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     # mean = torch.zeros(batch.shape[0], 1, 128, 128)
     # variance = torch.ones(batch.shape[0], 1, 128, 128)
     # rnd_assgn = torch.normal(mean, variance, requires_grad=True)
+
     rnd_assgn = torch.randn((batch.shape[0], 1, 128, 128))
 
     fake_csp, fake_batch = gen(rnd_assgn)
@@ -182,8 +194,9 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     n = int(csp_size['n'])
     d = int(csp_size['d'])
     
+    label.fill_(fake_label)
     output = discr(fake_batch.detach())
-    fake_loss = loss_fn(output, fake)
+    fake_loss = loss_fn(output, label)
 
     fake_loss.backward()
     D_G_z1 = output.mean().item()
@@ -193,24 +206,31 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
 
     discr_loss = (real_loss + fake_loss)/2
 
+
     discr_optimizer.step()
 
     ############################
     # (2) Update G network: maximize log(D(G(z)))
     ###########################
+    print('Optimizing the generator')
     gen_optimizer = optimizer['gen']
     gen_optimizer.zero_grad()
+    label.fill_(real_label)
 
     output = discr(fake_batch)
-    gen_loss = loss_fn(output, real)
-
+    print(output)
+    gen_loss = loss_fn(output, label)
+    print('Generator loss ', gen_loss)
     
 
     D_G_z2 = output.mean().item()
+    print('Start backpropagation')
     gen_loss.backward()
+    print('End backpropagation')
 
     gen_top = gen.conv[0].weight.grad
     gen_bottom = gen.dense[-1].weight.grad
+    print('gen_bottom grad: ', gen_top.norm())
 
 
     gen_optimizer.step()

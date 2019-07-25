@@ -1,8 +1,9 @@
 import argparse
 import torch
+from torch import autograd
 from dataset import ToTensor, CSPDataset
 from torch.utils.data import DataLoader, Dataset
-from model import Generator, Discriminator, train_batch, weights_init, printgradnorm
+from model import Generator, Discriminator, train_batch, weights_init, printgradnorm_forward, printgradnorm_backward
 import json
 from pathlib import Path
 import time
@@ -71,10 +72,11 @@ if __name__ == '__main__':
     optimizer = {'gen': g_optimizer, 'discr':d_optimizer}
 
     # hooks to print gradients
-    # discriminator.model.register_forward_hook(printgradnorm)
-    # discriminator.dense.register_forward_hook(printgradnorm)
-    # generator.conv.register_forward_hook(printgradnorm)
-    # generator.dense.register_forward_hook(printgradnorm)
+    # discriminator.model.register_backward_hook(printgradnorm_backward)
+    # discriminator.dense.register_backward_hook(printgradnorm_backward)
+    # generator.conv.register_backward_hook(printgradnorm_backward)
+    # generator.dense.register_backward_hook(printgradnorm_backward)
+
 
 
     print("Start training")
@@ -100,11 +102,13 @@ if __name__ == '__main__':
 
             # Update network
             start = time.time()
-            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
-                csp_shape, adversarial_loss, optimizer)
+            with autograd.detect_anomaly():
+                gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
+                    csp_shape, adversarial_loss, optimizer)
+            
 
             print(discr_top.shape)
-            print(torch.sum(gen_bottom).item())
+            print(torch.norm(gen_bottom).item())
             # saving metrics
             gen_loss_history.append(gen_loss.item())
             discr_loss_history.append(discr_loss.item())

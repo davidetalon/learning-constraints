@@ -10,4 +10,4 @@ python train.py \
 --discr_lr=0.0001 \
 --size=10000 \
 --batch_size=4 \
---num_epochs=1\
+--num_epochs=80 \
