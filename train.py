@@ -36,7 +36,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     #%% Check device
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     #%% Create dataset
     dataset = CSPDataset(size=args.size, k=args.k, n=args.n, alpha=args.alpha,\
@@ -55,10 +55,10 @@ if __name__ == '__main__':
     # define the architecture
     print("Initializing the model")
     generator = Generator(gen_input_size, csp_shape)
-    generator.to(device)
+    # generator.to(device)
 
     discriminator = Discriminator(csp_shape['n'], 2)
-    discriminator.to(device)
+    # discriminator.to(device)
 
     generator.apply(weights_init)
     discriminator.apply(weights_init)
@@ -102,27 +102,32 @@ if __name__ == '__main__':
 
             # Update network
             start = time.time()
-            with autograd.detect_anomaly():
-                gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
-                    csp_shape, adversarial_loss, optimizer)
-            
 
-            print(discr_top.shape)
-            print(torch.norm(gen_bottom).item())
-            # saving metrics
-            gen_loss_history.append(gen_loss.item())
-            discr_loss_history.append(discr_loss.item())
+            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
+                csp_shape, adversarial_loss, optimizer)
+
+            # train_batch(generator, discriminator, batch, csp_shape, adversarial_loss, optimizer)
+            
+            
+            # discr_loss, D_x, D_G_z1 = train_batch(generator, discriminator, batch, \
+            #     csp_shape, adversarial_loss, optimizer)
+
+            # print(discr_top.shape)
+            # print(torch.norm(gen_bottom))
+            # # saving metrics
+            gen_loss_history.append(gen_loss)
+            discr_loss_history.append(discr_loss)
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
             D_G_z2_history.append(D_G_z1)
-            discr_top_grad.append(torch.sum(discr_top).item())
-            discr_bottom_grad.append(torch.sum(discr_bottom).item())
-            gen_top_grad.append(torch.sum(gen_top).item())
-            gen_bottom_grad.append(torch.sum(gen_bottom).item())
+            discr_top_grad.append(discr_top)
+            discr_bottom_grad.append(discr_bottom)
+            gen_top_grad.append(gen_top)
+            gen_bottom_grad.append(gen_bottom)
 
             end = time.time()
             print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
-            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss.item(), gen_loss.item(), D_x, D_G_z1, D_G_z2))
+            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss, gen_loss, D_x, D_G_z1, D_G_z2))
 
     # count the number of wrong non-sat assignments
     

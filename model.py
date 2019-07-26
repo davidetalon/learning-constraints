@@ -4,6 +4,7 @@ import torch
 from csp import CSP,  matrix_assignment_consistency
 from solver import CSPSolver
 import math
+import time
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -51,16 +52,16 @@ class Generator(nn.Module):
             nn.ConvTranspose2d( 16, out_channels=32, kernel_size=3, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.ConvTranspose2d( 32, out_channels=64, kernel_size=3, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
+            # nn.ConvTranspose2d( 32, out_channels=64, kernel_size=3, stride=1, padding=0, bias=False),
+            # nn.BatchNorm2d(64),
+            # nn.ReLU(),
             # nn.ConvTranspose2d( 64, out_channels=128, kernel_size=3, stride=1, padding=0, bias=False),
             # nn.BatchNorm2d(128),
             # nn.ReLU()
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(1183744, 512),
+            nn.Linear(574592, 512),
             nn.ReLU(),
             nn.Linear(512, 512),
             nn.ReLU(),
@@ -82,17 +83,20 @@ class Generator(nn.Module):
         matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
         matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
         matrix = self.sigmoid(matrix)
+        print('matrix shape', matrix.shape)
         # matrix = torch.round(matrix)
         # matrix = torch.where(matrix < 0.5, torch.zeros(matrix.shape, requires_grad=True), torch.ones(matrix.shape, requires_grad=True))
 
         assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n)
         assignments = assignments.view(assignments.size()[0], -1, self.n)
         assignments = self.relu(assignments)
+        print('assignments shape', assignments.shape)
         # assignments = torch.round(assignments)
 
         sat_label = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size + self.n, 1)
         sat_label = sat_label.view(sat_label.size()[0], 1, -1)
         sat_label = self.sigmoid(sat_label)
+        print('sat labels', sat_label.shape)
         # sat_label = torch.round(sat_label)
         # sat_label = torch.where(sat_label < 0.5, torch.zeros(sat_label.shape, requires_grad=True), torch.ones(sat_label.shape, requires_grad=True))
 
@@ -136,6 +140,7 @@ class Discriminator(nn.Module):
         x = x.view(x.shape[0], -1)
 
         out = self.dense(x)
+        print('discr output', out.shape)
         return out
 
 
@@ -166,20 +171,22 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     # fake = torch.zeros(batch.shape[0], 1)
 
     # with flipped labels and smoothing
-    # real = torch.empty((batch.shape[0],1)).uniform_(0, 0.1)
-    # fake = torch.empty((batch.shape[0],1)).uniform_(0.9, 1)
-    real_label = 1
-    fake_label = 0
-    label = torch.full((batch.shape[0],), real_label)
+    real = torch.empty((batch.shape[0],1)).uniform_(0, 0.1)
+    fake = torch.empty((batch.shape[0],1)).uniform_(0.9, 1)
+    # real_label = 1
+    # fake_label = 0
+    # label = torch.full((batch.shape[0],), real_label)
 
 
     # computing the loss
     output = discr(batch)
-    real_loss = loss_fn(output, label)
+    real_loss = loss_fn(output, real)
 
     D_x = output.mean().item()
-    
+    start = time.time()
     real_loss.backward()
+    end = time.time()
+    print('discr backprop true: ', end - start)
 
     # generate the CSP
     # mean = torch.zeros(batch.shape[0], 1, 128, 128)
@@ -188,26 +195,33 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
 
     rnd_assgn = torch.randn((batch.shape[0], 1, 128, 128))
 
+    start = time.time()
     fake_csp, fake_batch = gen(rnd_assgn)
+    end = time.time()
+    print('Generating fake batch:', end-start)
 
     # let's solve each problem with a solution
     n = int(csp_size['n'])
     d = int(csp_size['d'])
     
-    label.fill_(fake_label)
+    # label.fill_(fake_label)
     output = discr(fake_batch.detach())
-    fake_loss = loss_fn(output, label)
-
+    fake_loss = loss_fn(output, fake)
+    start = time.time()
     fake_loss.backward()
+    end = time.time()
+    print('discr backprop fake: ', end - start)
     D_G_z1 = output.mean().item()
 
-    discr_top = discr.model[0].weight.grad
-    discr_bottom = discr.dense[-2].weight.grad
+    discr_top = discr.model[0].weight.grad.norm()
+    discr_bottom = discr.dense[-2].weight.grad.norm()
 
-    discr_loss = (real_loss + fake_loss)/2
+    discr_loss = (real_loss.item() + fake_loss.item())/2
 
-
+    start = time.time()
     discr_optimizer.step()
+    end = time.time()
+    print('Step time for D: ', end-start)
 
     ############################
     # (2) Update G network: maximize log(D(G(z)))
@@ -215,27 +229,32 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     print('Optimizing the generator')
     gen_optimizer = optimizer['gen']
     gen_optimizer.zero_grad()
-    label.fill_(real_label)
+    # # label.fill_(real_label)
 
     output = discr(fake_batch)
-    print(output)
-    gen_loss = loss_fn(output, label)
-    print('Generator loss ', gen_loss)
+    # print(output)
+    gen_loss = loss_fn(output, real)
+    # print('Generator loss ', gen_loss)
     
 
     D_G_z2 = output.mean().item()
-    print('Start backpropagation')
+    # start = time.time()
     gen_loss.backward()
-    print('End backpropagation')
+    # end = time.time()
+    # print('backprop time for gen: ', end-start)
 
-    gen_top = gen.conv[0].weight.grad
-    gen_bottom = gen.dense[-1].weight.grad
-    print('gen_bottom grad: ', gen_top.norm())
+    gen_top = gen.conv[0].weight.grad.norm()
+    gen_bottom = gen.dense[-1].weight.grad.norm()
 
 
+    # start = time.time()
     gen_optimizer.step()
+    # end = time.time()
 
-    return gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom
+    # print('Step time for G: ', end-start)
+    return gen_loss.item(), discr_loss, D_x, D_G_z1, D_G_z2, discr_top.item(), discr_bottom.item(), gen_top.item(), gen_bottom.item()
+    # return gen_loss, discr_loss, D_x, D_G_z1, D_G_z2
+    # discr_top.item(), discr_bottom.item(), gen_top.item(), gen_bottom.item()
 
 
 from csp import CSP
