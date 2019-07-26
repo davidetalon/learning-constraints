@@ -83,20 +83,17 @@ class Generator(nn.Module):
         matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
         matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
         matrix = self.sigmoid(matrix)
-        print('matrix shape', matrix.shape)
         # matrix = torch.round(matrix)
         # matrix = torch.where(matrix < 0.5, torch.zeros(matrix.shape, requires_grad=True), torch.ones(matrix.shape, requires_grad=True))
 
         assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n)
         assignments = assignments.view(assignments.size()[0], -1, self.n)
         assignments = self.relu(assignments)
-        print('assignments shape', assignments.shape)
         # assignments = torch.round(assignments)
 
         sat_label = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size + self.n, 1)
         sat_label = sat_label.view(sat_label.size()[0], 1, -1)
         sat_label = self.sigmoid(sat_label)
-        print('sat labels', sat_label.shape)
         # sat_label = torch.round(sat_label)
         # sat_label = torch.where(sat_label < 0.5, torch.zeros(sat_label.shape, requires_grad=True), torch.ones(sat_label.shape, requires_grad=True))
 
@@ -140,7 +137,6 @@ class Discriminator(nn.Module):
         x = x.view(x.shape[0], -1)
 
         out = self.dense(x)
-        print('discr output', out.shape)
         return out
 
 
@@ -186,7 +182,6 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     start = time.time()
     real_loss.backward()
     end = time.time()
-    print('discr backprop true: ', end - start)
 
     # generate the CSP
     # mean = torch.zeros(batch.shape[0], 1, 128, 128)
@@ -198,7 +193,6 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     start = time.time()
     fake_csp, fake_batch = gen(rnd_assgn)
     end = time.time()
-    print('Generating fake batch:', end-start)
 
     # let's solve each problem with a solution
     n = int(csp_size['n'])
@@ -210,7 +204,6 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     start = time.time()
     fake_loss.backward()
     end = time.time()
-    print('discr backprop fake: ', end - start)
     D_G_z1 = output.mean().item()
 
     discr_top = discr.model[0].weight.grad.norm()
@@ -221,12 +214,10 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     start = time.time()
     discr_optimizer.step()
     end = time.time()
-    print('Step time for D: ', end-start)
 
     ############################
     # (2) Update G network: maximize log(D(G(z)))
     ###########################
-    print('Optimizing the generator')
     gen_optimizer = optimizer['gen']
     gen_optimizer.zero_grad()
     # # label.fill_(real_label)
