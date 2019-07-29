@@ -9,5 +9,5 @@ python train.py \
 --gen_lr=0.0002 \
 --discr_lr=0.0001 \
 --size=10000 \
---batch_size=1 \
+--batch_size=16 \
 --num_epochs=80 \

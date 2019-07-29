@@ -43,33 +43,34 @@ class Generator(nn.Module):
         self.sat_matrix_size = csp_shape['n']*csp_shape['d']
 
         self.conv = nn.Sequential(
-            nn.ConvTranspose2d( 1, out_channels=8, kernel_size=3, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(8),
-            nn.ReLU(),
-            nn.ConvTranspose2d( 8, out_channels=16, kernel_size=3, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.ConvTranspose2d( 16, out_channels=32, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d( 1, out_channels=32, kernel_size=7, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(32),
-            nn.ReLU(),
-            # nn.ConvTranspose2d( 32, out_channels=64, kernel_size=3, stride=1, padding=0, bias=False),
-            # nn.BatchNorm2d(64),
-            # nn.ReLU(),
-            # nn.ConvTranspose2d( 64, out_channels=128, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.ReLU(True),
+            nn.ConvTranspose2d( 32, out_channels=128, kernel_size=5, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            # nn.ConvTranspose2d( 64, out_channels=128, kernel_size=5, stride=1, padding=0, bias=False),
             # nn.BatchNorm2d(128),
-            # nn.ReLU()
+            # nn.ReLU(),
+            nn.ConvTranspose2d( 128, out_channels=128, kernel_size=5, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.Linear(142, 64),
+            
+            nn.ReLU(True),
+            nn.Linear(64, 32),
         )
 
         self.dense = nn.Sequential(
-            nn.Linear(574592, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, self.sat_matrix_size*self.sat_matrix_size + csp_shape['n'] + 1)
+            # nn.Linear(134, 256),
+            # nn.ReLU(),
+            nn.Linear(581632, 256),
+            nn.ReLU(True),
+            nn.Linear(256, self.sat_matrix_size*self.sat_matrix_size + csp_shape['n'] + 1)
         )
 
         self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
+        self.sigmoid = nn.Tanh()
 
 
     def forward(self, x):
@@ -110,23 +111,19 @@ class Discriminator(nn.Module):
         self.input_size = input_size
         self.model = nn.Sequential(
             nn.Conv1d(1, out_channels=16, kernel_size=5, stride=2),
-            nn.BatchNorm1d(16),
-            nn.LeakyReLU(),
-            nn.Dropout(0.3),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv1d(16, out_channels=32, kernel_size=3, stride=2),
             nn.BatchNorm1d(32),
-            nn.LeakyReLU(),
-            nn.Dropout(0.3)
+            nn.LeakyReLU(0.2, inplace=True),
 
         )
 
         size = 32 * math.floor((math.floor(((input_size-4)/2) + 1) - 3)/2 + 1)
         print(size)
         self.dense = nn.Sequential(
-            nn.Linear(size , 32),
-            nn.LeakyReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(32, 1),
+            nn.Linear(size , 1),
+            # nn.LeakyReLU(),
+            # nn.Linear(32, 1),
             nn.Sigmoid()
         )
 
@@ -137,6 +134,7 @@ class Discriminator(nn.Module):
         x = x.view(x.shape[0], -1)
 
         out = self.dense(x)
+
         return out
 
 
@@ -209,7 +207,7 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     discr_top = discr.model[0].weight.grad.norm()
     discr_bottom = discr.dense[-2].weight.grad.norm()
 
-    discr_loss = (real_loss.item() + fake_loss.item())/2
+    discr_loss = (real_loss + fake_loss)/2
 
     start = time.time()
     discr_optimizer.step()
@@ -243,7 +241,7 @@ def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):
     # end = time.time()
 
     # print('Step time for G: ', end-start)
-    return gen_loss.item(), discr_loss, D_x, D_G_z1, D_G_z2, discr_top.item(), discr_bottom.item(), gen_top.item(), gen_bottom.item()
+    return gen_loss.item(), discr_loss.item(), D_x, D_G_z1, D_G_z2, discr_top.item(), discr_bottom.item(), gen_top.item(), gen_bottom.item()
     # return gen_loss, discr_loss, D_x, D_G_z1, D_G_z2
     # discr_top.item(), discr_bottom.item(), gen_top.item(), gen_bottom.item()
 

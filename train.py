@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import time
 import datetime
+import gc
 # create the parser
 parser = argparse.ArgumentParser(description='Train the CSP GAN')
 
@@ -107,6 +108,14 @@ if __name__ == '__main__':
                 csp_shape, adversarial_loss, optimizer)
 
             # train_batch(generator, discriminator, batch, csp_shape, adversarial_loss, optimizer)
+
+            # print('***********TENSOR INFO***********')
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
             
             
             # discr_loss, D_x, D_G_z1 = train_batch(generator, discriminator, batch, \
@@ -114,7 +123,7 @@ if __name__ == '__main__':
 
             # print(discr_top.shape)
             # print(torch.norm(gen_bottom))
-            # # saving metrics
+            # saving metrics
             gen_loss_history.append(gen_loss)
             discr_loss_history.append(discr_loss)
             D_x_history.append(D_x)
