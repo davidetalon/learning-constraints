@@ -64,9 +64,10 @@ class Generator(nn.Module):
         )
 
         self.dense = nn.Sequential(
+
             nn.Linear(581632, 256),
             nn.LeakyReLU(0.2, True),
-            nn.Linear(256, csp_shape['n'] + 1)
+            nn.Linear(256, self.sat_matrix_size*self.sat_matrix_size + csp_shape['n'] + 1)
         )
 
         self.relu = nn.LeakyReLU(0.2, True)
@@ -87,19 +88,23 @@ class Generator(nn.Module):
 
         x = self.dense(x)
 
+        matrix = torch.narrow(x, 1, 0, self.sat_matrix_size*self.sat_matrix_size)
+        matrix = matrix.view(matrix.size()[0], self.sat_matrix_size, -1)
+        matrix = self.sigmoid(matrix)
 
-        assignments = torch.narrow(x, 1, 0, self.n)
+
+        assignments = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size, self.n)
         assignments = assignments.view(assignments.size()[0], -1, self.n)
         assignments = self.relu(assignments)
 
-        sat_label = torch.narrow(x, 1, self.n, 1)
+
+        sat_label = torch.narrow(x, 1, self.sat_matrix_size * self.sat_matrix_size + self.n, 1)
         sat_label = sat_label.view(sat_label.size()[0], 1, -1)
         sat_label = self.sigmoid(sat_label)
 
-
         labeled_assignments = torch.cat((assignments.type(torch.float), sat_label.type(torch.float)), dim=-1)
 
-        return labeled_assignments
+        return matrix, labeled_assignments
 
 class Discriminator(nn.Module):
 
@@ -137,12 +142,10 @@ class Discriminator(nn.Module):
             nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2, inplace=True),
 
-        )
+            nn.Conv1d(128, 1, 1, 2, bias=False),
 
-        self.dense = nn.Sequential(
-            nn.Linear(581632, 256),
-            nn.LeakyReLU(0.2, True),
-            nn.Linear(256, 2)
+
+            nn.Sigmoid()
         )
 
 
@@ -154,17 +157,9 @@ class Discriminator(nn.Module):
                 x: input vector.
         """
         x = self.model(x)
-
-        # flattening
-        x = x.view(x.size()[0], -1)
-
-        x = self.dense(x)
-
-        x = torch.narrow(x, 1, 0, 1)
-        sat = torch.narrow(x, 1, 1, 1)
         out = torch.squeeze(x, dim=-1)
 
-        return x, out
+        return out
 
 
 def train_batch(gen, discr, batch, csp_size, loss_fn, optimizer):

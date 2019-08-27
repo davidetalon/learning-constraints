@@ -6,7 +6,7 @@ import numpy as np
 from dataset import ToTensor, CSPDataset
 from csp import matrix_assignment_consistency
 from torch.utils.data import DataLoader, Dataset
-from model import Generator, Discriminator, train_batch, weights_init, printgradnorm_forward, printgradnorm_backward
+from model import Generator, Discriminator, train_batch, weights_init
 import json
 from pathlib import Path
 import time
@@ -75,13 +75,6 @@ if __name__ == '__main__':
     d_optimizer = torch.optim.SGD(discriminator.parameters(), lr=args.discr_lr)
     optimizer = {'gen': g_optimizer, 'discr':d_optimizer}
 
-    # hooks to print gradients
-    # discriminator.model.register_backward_hook(printgradnorm_backward)
-    # discriminator.dense.register_backward_hook(printgradnorm_backward)
-    # generator.conv.register_backward_hook(printgradnorm_backward)
-    # generator.dense.register_backward_hook(printgradnorm_backward)
-
-
 
     print("Start training")
     gen_loss_history = []
@@ -110,22 +103,6 @@ if __name__ == '__main__':
             gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(generator, discriminator, batch, \
                 csp_shape, adversarial_loss, optimizer)
 
-            # train_batch(generator, discriminator, batch, csp_shape, adversarial_loss, optimizer)
-
-            # print('***********TENSOR INFO***********')
-            # for obj in gc.get_objects():
-            #     try:
-            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-            #             print(type(obj), obj.size())
-            #     except:
-            #         pass
-            
-            
-            # discr_loss, D_x, D_G_z1 = train_batch(generator, discriminator, batch, \
-            #     csp_shape, adversarial_loss, optimizer)
-
-            # print(discr_top.shape)
-            # print(torch.norm(gen_bottom))
             # saving metrics
             gen_loss_history.append(gen_loss)
             discr_loss_history.append(discr_loss)
@@ -149,9 +126,6 @@ if __name__ == '__main__':
     with torch.no_grad(): # Disable gradient tracking
 
         # starting from random noise
-        # mean = torch.zeros(1, 1, 128, 128)
-        # variance = torch.ones(1, 1, 128, 128)
-        # rnd_assgn = torch.normal(mean, variance)
         rnd_assgn = torch.randn((1, 1, 128, 128))
 
         csp, assgn = generator(rnd_assgn)
@@ -164,22 +138,6 @@ if __name__ == '__main__':
     csp[csp > 0.5] = 1
     csp[csp <= 0.5] = 0 
 
-    TP = 0
-    FP = 0
-    TN = 0
-    FN = 0
-
-    # print (csp.shape, dataset.csp.matrix.shape)
-    # for row in range(csp.shape[0]):
-    #     for col in range(csp.shape[0]):
-    #         if csp[row, col]==dataset.csp.matrix[row, col] ==1:
-    #             TP += 1
-    #         if csp[row, col]!=dataset.csp.matrix[row, col] and csp[row, col]==1:
-    #             FP +=1
-    #         if csp[row, col]==dataset.csp.matrix[row, col] ==0:
-    #             TN +=1
-    #         if csp[row, col]!=dataset.csp.matrix[row, col] and csp[row, col]==0:
-    #             FN +=1
 
     flatten_gen_data = dataset.csp.matrix.flatten()
     flatten_csp = csp.flatten()
@@ -188,7 +146,7 @@ if __name__ == '__main__':
     TP = cm[0][0]
     FP = cm[0][1]
     FN = cm[1][0]
-    TN=cm[1][1]
+    TN = cm[1][1]
 
     matrix_size = csp_shape['n']*csp_shape['d']
     accuracy = ((matrix_size**2) - errors)/matrix_size**2
