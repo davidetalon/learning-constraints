@@ -52,14 +52,6 @@ class CSPDataset(Dataset):
         self.assignments = np.concatenate((sat_assignments, rnd_assignments), 0)
         
 
-        # add random noise to assignments
-        # random_increments = np.random.randint(-1, 1, size=self.assignments.shape)
-        # random_increments[:, -1] = 0
-
-        # self.assignments = np.add(self.assignments, random_increments)
-        # consistency = matrix_assignment_consistency(torch.from_numpy(self.assignments[:, :-1]), torch.from_numpy(self.csp.matrix), int(self.csp.d), self.csp.n)
-        # self.assignments[:, -1] = consistency
-
     def __len__(self):
         """
         Compute the length of the dataset
@@ -85,13 +77,6 @@ class CSPDataset(Dataset):
 
 
         sample_unsqueezed = torch.unsqueeze(sample, 0)
-
-        # # check consistency
-        # consistency = matrix_assignment_consistency(sample_unsqueezed.type(torch.int64), torch.from_numpy(self.csp.matrix), self.csp.d)
-
-        # # label each sample with its consistency
-        # sample = torch.cat((sample_unsqueezed, consistency.type(torch.float)),1)
-        # sample.squeeze()
 
         return sample_unsqueezed
 

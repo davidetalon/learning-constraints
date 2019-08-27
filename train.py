@@ -1,7 +1,10 @@
 import argparse
 import torch
 from torch import autograd
+from sklearn.metrics import confusion_matrix
+import numpy as np
 from dataset import ToTensor, CSPDataset
+from csp import matrix_assignment_consistency
 from torch.utils.data import DataLoader, Dataset
 from model import Generator, Discriminator, train_batch, weights_init, printgradnorm_forward, printgradnorm_backward
 import json
@@ -69,7 +72,7 @@ if __name__ == '__main__':
 
     # optimizer
     g_optimizer = torch.optim.Adam(generator.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=args.discr_lr, betas=(0.5, 0.999))
+    d_optimizer = torch.optim.SGD(discriminator.parameters(), lr=args.discr_lr)
     optimizer = {'gen': g_optimizer, 'discr':d_optimizer}
 
     # hooks to print gradients
@@ -146,9 +149,10 @@ if __name__ == '__main__':
     with torch.no_grad(): # Disable gradient tracking
 
         # starting from random noise
-        mean = torch.zeros(1, 1, 128, 128)
-        variance = torch.ones(1, 1, 128, 128)
-        rnd_assgn = torch.normal(mean, variance)
+        # mean = torch.zeros(1, 1, 128, 128)
+        # variance = torch.ones(1, 1, 128, 128)
+        # rnd_assgn = torch.normal(mean, variance)
+        rnd_assgn = torch.randn((1, 1, 128, 128))
 
         csp, assgn = generator(rnd_assgn)
     
@@ -156,9 +160,54 @@ if __name__ == '__main__':
     print('fake csp', csp.shape)
     errors = torch.sum((torch.from_numpy(dataset.csp.matrix).type(torch.float) - csp).pow(2)).item()
 
+    csp = np.squeeze(csp.numpy())
+    csp[csp > 0.5] = 1
+    csp[csp <= 0.5] = 0 
+
+    TP = 0
+    FP = 0
+    TN = 0
+    FN = 0
+
+    # print (csp.shape, dataset.csp.matrix.shape)
+    # for row in range(csp.shape[0]):
+    #     for col in range(csp.shape[0]):
+    #         if csp[row, col]==dataset.csp.matrix[row, col] ==1:
+    #             TP += 1
+    #         if csp[row, col]!=dataset.csp.matrix[row, col] and csp[row, col]==1:
+    #             FP +=1
+    #         if csp[row, col]==dataset.csp.matrix[row, col] ==0:
+    #             TN +=1
+    #         if csp[row, col]!=dataset.csp.matrix[row, col] and csp[row, col]==0:
+    #             FN +=1
+
+    flatten_gen_data = dataset.csp.matrix.flatten()
+    flatten_csp = csp.flatten()
+    print(flatten_csp.shape, type(flatten_csp))
+    cm = confusion_matrix(flatten_gen_data, flatten_csp)
+    TP = cm[0][0]
+    FP = cm[0][1]
+    FN = cm[1][0]
+    TN=cm[1][1]
+
     matrix_size = csp_shape['n']*csp_shape['d']
     accuracy = ((matrix_size**2) - errors)/matrix_size**2
     print(accuracy)
+    print("TP %d, FP %d, TN %d, FN %d"% (TP, FP, TN, FN))
+
+
+    # check if given samples are correctly recognized
+    satisfaiability = matrix_assignment_consistency(torch.from_numpy(dataset.assignments).type(torch.int64), torch.from_numpy(csp), csp_shape['d'], csp_shape['n'])
+    satisfaiability = satisfaiability.numpy()
+
+    satisfaiability = np.squeeze(satisfaiability)
+    assignment_sat = dataset.assignments[:,-1]
+    assignment_sat = np.squeeze(assignment_sat)
+
+    correctly_classified = (np.array(dataset.assignments[:,-1].astype(int)) == satisfaiability).sum()
+
+    print('correctly classified: ', correctly_classified)
+
     #Save all needed parameters
     print("Saving parameters")
     # Create output dir
@@ -184,7 +233,7 @@ if __name__ == '__main__':
     with open(out_dir / csp_file_name, 'w') as f:
         json.dump(dataset.csp.matrix.tolist(), f, indent=4)
     
-    metrics = {'n_sat_assignments':dataset.n_sat_assignments, 'acc':accuracy, 'gen_loss':gen_loss_history, \
+    metrics = {'correctly classified': int(correctly_classified), 'TP': int(TP), 'FP': int(FP), 'TN': int(TN), 'FN': int(FN), 'n_sat_assignments':dataset.n_sat_assignments, 'acc':accuracy, 'gen_loss':gen_loss_history, \
         'discr_loss':discr_loss_history, 'D_x':D_x_history, 'D_G_z1':D_G_z1_history, 'D_G_z2':D_G_z2_history, \
         'gen_top':gen_top_grad, 'gen_bottom':gen_bottom_grad, 'discr_top':discr_top_grad, 'discr_bottom':discr_bottom_grad}
     
